@@ -33,9 +33,26 @@ function secondsToTime(sec) {
 // Returns: string formatted as h:mm:ss
 // ============================================================
 function getShiftDuration(startTime, endTime) {
-    let start = time12ToSeconds(startTime);
-    let end = time12ToSeconds(endTime);
-    return secondsToTime(end - start);
+    function parseTime(t) {
+        t = t.trim().toLowerCase();
+        let [time, meridian] = t.split(" ");
+        let [h, m, s] = time.split(":").map(Number);
+        if (meridian === "pm" && h < 12) h += 12;
+        if (meridian === "am" && h === 12) h = 0;
+        return h * 3600 + m * 60 + s;
+    }
+
+    let startSeconds = parseTime(startTime);
+    let endSeconds = parseTime(endTime);
+
+    let durationSeconds = endSeconds - startSeconds;
+    if (durationSeconds < 0) durationSeconds += 24 * 3600;
+
+    let h = Math.floor(durationSeconds / 3600);
+    let m = Math.floor((durationSeconds % 3600) / 60);
+    let s = durationSeconds % 60;
+
+    return `${h}:${m}:${s}`;
 }
 
 // ============================================================
@@ -45,21 +62,33 @@ function getShiftDuration(startTime, endTime) {
 // Returns: string formatted as h:mm:ss
 // ============================================================
 function getIdleTime(startTime, endTime) {
-    const START_WORK = time12ToSeconds("8:00:00 am");
-    const END_WORK = time12ToSeconds("10:00:00 pm");
+    function parseTime24(t) {
+        t = t.trim().toLowerCase();
+        let [time, meridian] = t.split(" ");
+        let [h, m, s] = time.split(":").map(Number);
+        if (meridian === "pm" && h < 12) h += 12;
+        if (meridian === "am" && h === 12) h = 0;
+        return h * 3600 + m * 60 + s;
+    }
 
-    let start = time12ToSeconds(startTime);
-    let end = time12ToSeconds(endTime);
+    const DELIVERY_START = 8 * 3600; 
+    const DELIVERY_END = 22 * 3600;  
+
+    let startSec = parseTime24(startTime);
+    let endSec = parseTime24(endTime);
 
     let idle = 0;
 
-    if (start < START_WORK) idle += Math.min(end, START_WORK) - start;
-
-    if (end > END_WORK) idle += end - Math.max(start, END_WORK);
+    if (startSec < DELIVERY_START) idle += Math.min(endSec, DELIVERY_START) - startSec;
+    if (endSec > DELIVERY_END) idle += endSec - Math.max(startSec, DELIVERY_END);
 
     if (idle < 0) idle = 0;
 
-    return secondsToTime(idle);
+    let h = Math.floor(idle / 3600);
+    let m = Math.floor((idle % 3600) / 60);
+    let s = idle % 60;
+
+    return `${h}:${m}:${s}`;
 
 }
 
@@ -191,24 +220,19 @@ function setBonus(textFile, driverID, date, newValue) {
 // Returns: number (-1 if driverID not found)
 // ============================================================
 function countBonusPerMonth(textFile, driverID, month) {
-    let rows = fs.readFileSync(textFile, "utf8").trim().split("\n");
+    let data = fs.readFileSync(textFile, "utf-8").trim().split("\n");
+    driverID = driverID.trim();
+    month = month.replace(/^0/, ""); 
 
     let found = false;
     let count = 0;
 
-    month = parseInt(month);
-
-    for (let r of rows) {
-
-        let cols = r.split(",");
-
-        if (cols[0] === driverID) {
+    for (let line of data) {
+        let [id,, date,, , , , , , hasBonus] = line.split(",").map(x => x.trim());
+        if (id === driverID) {
             found = true;
-
-            let m = parseInt(cols[2].split("-")[1]);
-
-            if (m === month && cols[9] === "true")
-                count++;
+            let lineMonth = String(Number(date.split("-")[1])); 
+            if (lineMonth === month && hasBonus.toLowerCase() === "true") count++;
         }
     }
 
